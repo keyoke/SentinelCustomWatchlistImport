@@ -1,2 +1,2 @@
-# SentinelWatchListImport
-Sentinel WatchlList Import
+# SentinelWatchlistImport
+Sentinel Watchlist Import
