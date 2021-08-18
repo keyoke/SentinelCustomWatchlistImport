@@ -226,7 +226,7 @@ Get-AzStorageBlob -Container $env:APPSETTING_WATCHLIST_STORAGE_INCOMING_CONTAINE
 
     if($_.ICloudBlob.Properties.Created.HasValue)
     {
-        $created_date = Get-Date $_.ICloudBlob.Properties.Created.Value.ToString("yyyyMMdd")
+        $created_date = $_.ICloudBlob.Properties.Created.Value.ToString("yyyyMMdd")
     }
 
     $blobCopyAction = Start-AzStorageBlobCopy `
