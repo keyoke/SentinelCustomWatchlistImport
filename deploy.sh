@@ -11,13 +11,15 @@ else
     WATCHLIST_WORKSPACE_ID="$5"
     WATCHLIST_WORKSPACE_SHARED_KEY="$6"
 
+    # Create the target resource group
     az group create --name $RESOURCE_GROUP --location $LOCATION
 
+    # build our bicep template
     az bicep build --file main.bicep
 
-    FUNCTION_APP_NAME=$(az deployment group create --query 'properties.outputs.functionAppName.value' --output tsv --name [DEPLOYMENT_NAME] --resource-group $RESOURCE_GROUP --template-file main.json --parameters watchlistStorageAccountName=$STORAGE_ACCOUNT_NAME --parameters watchlistStorageSubscriptionId=$STORAGE_ACCOUNT_SUBSCRIPTION_ID --parameters watchlistWorkspaceId=$WATCHLIST_WORKSPACE_ID --parameters workspaceSharedKey=$WATCHLIST_WORKSPACE_SHARED_KEY)
+    # deploy our template to azure and get functionappname
+    FUNCTION_APP_NAME=$(az deployment group create --query 'properties.outputs.functionAppName.value' --output tsv --resource-group $RESOURCE_GROUP --template-file main.json --parameters watchlistStorageAccountName=$STORAGE_ACCOUNT_NAME --parameters watchlistStorageSubscriptionId=$STORAGE_ACCOUNT_SUBSCRIPTION_ID --parameters watchlistWorkspaceId=$WATCHLIST_WORKSPACE_ID --parameters workspaceSharedKey=$WATCHLIST_WORKSPACE_SHARED_KEY)
 
-    cd functionapp
-
-    func azure functionapp publish $FUNCTION_APP_NAME
+    # Finally publish our function app package
+    (cd functionapp/; func azure functionapp publish $FUNCTION_APP_NAME)
 fi
