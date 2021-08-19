@@ -1,5 +1,6 @@
-# SentinelWatchlistImport
-Sentinel Watchlist Import
+# Sentinel Custom Watchlist Import
+
+## Overview
 
 # Requirements
 - Azure CLI 2.x
