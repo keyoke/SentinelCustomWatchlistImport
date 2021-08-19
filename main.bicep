@@ -294,3 +294,6 @@ resource secret 'Microsoft.KeyVault/vaults/secrets@2018-02-14' = {
     value: workspaceSharedKey
   }
 }
+
+
+output functionAppName string = functionAppName
