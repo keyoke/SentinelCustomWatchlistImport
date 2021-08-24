@@ -49,7 +49,7 @@ function Import-Watchlist
     # Loop through each row in the csv
     for ($i = 0 ; $i -lt $csv.length ; $i++) { 
         # Get our current record
-        $current_record = Get-Record -records $csv -index $index
+        $current_record = Get-Record -records $csv -index $i
 
         # Maximum of 30 MB per post to Log Analytics Data Collector API. This is a size limit for a single post. If the data from a single post that exceeds 30 MB, you should split the data up to smaller sized chunks and send them concurrently.
         if(([System.Text.Encoding]::UTF8.GetByteCount(($records + $current_record  | ConvertTo-Json -Depth 99 -Compress)) / 1MB) -ge $MAX_JSON_PAYLOAD_SIZE_MB)
