@@ -8,8 +8,9 @@ This repository provides a custom watchlist import solution which can be used to
 The custom import process is as follows:
 1. A CSV file with the naming convention "watchlist_[LOG_ANALYTS_TABLE_NAME].csv" is dropped into the "incoming" Blob Storage container.
 1. The Azure Function (ImportWatchlistDaily) is scheduled to run once a day on a CRON schedule "0 * 0 * * *", once triggered the function checks the "incoming" container for new watch lists.
-1. When a new watch list arrives the contents of the file is hashed and it is converted to JSON, each row is inserted into a table in the Log Analytics Workspace. 
-1. When querying the data we can use the file hash to group related rows which were imported from the same source.
+1. When a new watch list arrives the contents of the file is hashed and the rows are converted to JSON, each row is inserted into a table in the Log Analytics Workspace. 
+1. Once the file is processed it is moved to the "imported" Blob Storage Container.
+1. When querying the data we can use the FileContentSHA256 and the TimeGenerated properties to group related rows which were imported from the same source.
 
 # Requirements
 - Azure CLI 2.x
