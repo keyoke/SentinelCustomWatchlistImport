@@ -1,6 +1,9 @@
 # Sentinel Custom Watchlist Import
 
 ## Overview
+This repository provides a custom watchlist import solution which can be used to work around [Sentinels native watchlist](https://docs.microsoft.com/en-us/azure/sentinel/watchlists#create-a-new-watchlist) file import size limitation of 3.8 MB.
+
+![Solution Overview](images/solution-overview.png)
 
 # Requirements
 - Azure CLI 2.x
