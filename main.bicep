@@ -164,7 +164,7 @@ resource functionApp 'Microsoft.Web/sites@2020-06-01' = {
 }
 
 // Function App Config
-resource functionAppConfig 'Microsoft.Web/sites/config@2020-06-01' = {
+resource functionAppConfig 'Microsoft.Web/sites/config@2021-01-15' = {
   parent: functionApp
 
   name: 'web'
@@ -183,6 +183,7 @@ resource functionAppConfig 'Microsoft.Web/sites/config@2020-06-01' = {
     ]
     netFrameworkVersion: 'v4.0'
     phpVersion: '5.6'
+    powerShellVersion: '~7'
     requestTracingEnabled: false
     remoteDebuggingEnabled: false
     httpLoggingEnabled: false

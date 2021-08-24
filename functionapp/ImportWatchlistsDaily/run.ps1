@@ -49,10 +49,7 @@ function Import-Watchlist
     # Loop through each row in the csv
     for ($i = 0 ; $i -lt $csv.length ; $i++) { 
         # Get our current record
-        $current_record = Get-Record -records $csv -index $index
-
-        # Add the File Hash to the record object
-        $current_record.Add("FileContentSHA256", $FileContentSHA256)
+        $current_record = Get-Record -records $csv -index $i
 
         # Maximum of 30 MB per post to Log Analytics Data Collector API. This is a size limit for a single post. If the data from a single post that exceeds 30 MB, you should split the data up to smaller sized chunks and send them concurrently.
         if(([System.Text.Encoding]::UTF8.GetByteCount(($records + $current_record  | ConvertTo-Json -Depth 99 -Compress)) / 1MB) -ge $MAX_JSON_PAYLOAD_SIZE_MB)
@@ -91,12 +88,17 @@ function Get-Record
 
         [Parameter(Mandatory)]
         [ValidateNotNullOrEmpty()]
-        [int] $index
+        [int] $index,
+
+        [Parameter(Mandatory)]
+        [ValidateNotNullOrEmpty()]
+        [String] $FileContentSHA256
     )
     if(($index -ge 0) -and 
         ($index -lt $records.Length))
     {
         $record = @{}
+
         $records[$index].PSObject.Properties | ForEach-Object {
             # Maximum of 32 KB limit for field values. If the field value is greater than 32 KB, the data will be truncated.
             $sizeInKB = ([System.Text.Encoding]::UTF8.GetByteCount($_.Value) / 1KB)
@@ -110,6 +112,10 @@ function Get-Record
                 $record.Add($_.Name,$_.Value)
             }
         }
+
+        # Add the File Hash to the record object
+        $record.Add("FileContentSHA256", $FileContentSHA256)
+
         return $record
     }
     # no record to return we are out if bounds
