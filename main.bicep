@@ -7,14 +7,14 @@ param watchlistStorageSubscriptionId string = ''
 param watchlistWorkspaceId string = ''
 param workspaceSharedKey string = ''
 
-param appNamePrefix string = uniqueString(resourceGroup().id)
+param appNameSuffix string = uniqueString(resourceGroup().id)
 
-var functionAppName = '${appNamePrefix}-functionapp'
-var vaultName = '${appNamePrefix}-vault'
-var appServiceName = '${appNamePrefix}-appservice'
+var functionAppName = 'functionapp-${appNameSuffix}'
+var vaultName = 'vault-${appNameSuffix}'
+var appServiceName = 'appservice-${appNameSuffix}'
 
 // remove dashes for storage account name
-var storageAccountName = format('{0}sta', replace(appNamePrefix, '-', ''))
+var storageAccountName = format('sta{0}', replace(appNameSuffix, '-', ''))
 
 // Storage Account
 resource storageAccount 'Microsoft.Storage/storageAccounts@2019-06-01' = {
