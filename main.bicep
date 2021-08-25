@@ -2,7 +2,7 @@
 param location string = resourceGroup().location
 param watchlistStorageAccountName string = ''
 param watchlistStorageAccountIncomingContainerName string = 'incoming'
-param watchlistStorageAccountCompletedContainerName string = 'completed'
+param watchlistStorageAccountCompletedContainerName string = 'imported'
 param watchlistStorageSubscriptionId string = ''
 param watchlistWorkspaceId string = ''
 param workspaceSharedKey string = ''
@@ -149,7 +149,7 @@ resource functionApp 'Microsoft.Web/sites@2020-06-01' = {
         }
         {
           name: 'WATCHLIST_WORKSPACE_SHARED_KEY'
-          value: '@Microsoft.KeyVault(SecretUri=https://${vaultName}.vault.azure.net/secrets/WATCHLIST-WORKSPACE-SHARED-KEY'
+          value: '@Microsoft.KeyVault(SecretUri=https://${vaultName}.vault.azure.net/secrets/WATCHLIST-WORKSPACE-SHARED-KEY)'
         }
       ]
     }
