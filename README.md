@@ -18,18 +18,23 @@ The custom import process is as follows:
 - Bicep CLI 0.4.x
 - ARMClient 1.9.x
 
+This solution also requires an existing Azure Storage Account where the CSV will be imported from, use the instructions detailed [here](https://docs.microsoft.com/en-us/azure/storage/blobs/storage-quickstart-blobs-cli) to create one and add two blob containers:
+- incoming
+- imported
+
 # Deployment Steps
 Run the provided Shell script
 
-- ./deploy.sh [RESOURCE_GROUP] [LOCATION] [STORAGE_ACCOUNT_NAME] [STORAGE_ACCOUNT_SUBSCRIPTION_ID] [WATCHLIST_WORKSPACE_ID] [WATCHLIST_WORKSPACE_SHARED_KEY] 
+- ./deploy.sh [RESOURCE_GROUP] [LOCATION] [STORAGE_ACCOUNT_NAME] [STORAGE_ACCOUNT_RESOURCE_GROUP] [STORAGE_ACCOUNT_SUBSCRIPTION_ID] [WATCHLIST_WORKSPACE_ID] [WATCHLIST_WORKSPACE_SHARED_KEY] 
 
 or manually execute the deployment using the steps below:
 
 1. az group create --name [RESOURCE_GROUP] --location [LOCATION]
-2. az bicep build --file .\main.bicep
-3. az deployment group create --name [DEPLOYMENT_NAME] --resource-group [RESOURCE_GROUP] --template-file main.json --parameters watchlistStorageAccountName=[STORAGE_ACCOUNT_NAME] --parameters watchlistStorageSubscriptionId=[STORAGE_ACCOUNT_SUBSCRIPTION_ID]  --parameters watchlistWorkspaceId=[WATCHLIST_WORKSPACE_ID] --parameters workspaceSharedKey=[WATCHLIST_WORKSPACE_SHARED_KEY] 
-4. cd functionapp/
-5. func azure functionapp publish [FUNCTION_APP_NAME]
+1. az bicep build --file .\main.bicep
+1. az deployment group create --name [DEPLOYMENT_NAME] --resource-group [RESOURCE_GROUP] --template-file main.json --parameters watchlistStorageAccountName=[STORAGE_ACCOUNT_NAME] --parameters watchlistStorageSubscriptionId=[STORAGE_ACCOUNT_SUBSCRIPTION_ID]  --parameters watchlistWorkspaceId=[WATCHLIST_WORKSPACE_ID] --parameters workspaceSharedKey=[WATCHLIST_WORKSPACE_SHARED_KEY] 
+1. az role assignment create --role "Storage Blob Data Contributor" --assignee [FUNCTION_PRINCIPAL_ID] --scope "/subscriptions/[STORAGE_ACCOUNT_SUBSCRIPTION_ID]/resourceGroups/[STORAGE_ACCOUNT_RESOURCE_GROUP]/providers/Microsoft.Storage/storageAccounts/[STORAGE_ACCOUNT_NAME]"
+1. cd functionapp/
+1. func azure functionapp publish [FUNCTION_APP_NAME]
 
 
 # Azure Sentinel
