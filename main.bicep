@@ -298,3 +298,4 @@ resource secret 'Microsoft.KeyVault/vaults/secrets@2018-02-14' = {
 
 
 output functionAppName string = functionAppName
+output functionPrincipalId string = reference(functionApp.id, '2020-06-01', 'Full').identity.principalId
