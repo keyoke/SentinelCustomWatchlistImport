@@ -198,6 +198,84 @@ function Get-DataCollectorSignature
 
 }
 
+function Import-FromBlobStorage
+{
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [ValidateNotNullOrEmpty()]
+        [AzureStorageContext] $Context,
+
+        [Parameter(Mandatory)]
+        [ValidateNotNullOrEmpty()]
+        [String] $WatchlistStorageAccountName,
+
+        [Parameter(Mandatory)]
+        [ValidateNotNullOrEmpty()]
+        [String] $WatchlistStorageAccountIncomingContainerName,
+
+        [Parameter(Mandatory)]
+        [ValidateNotNullOrEmpty()]
+        [String] $WatchlistStorageAccountCompletedContainerName,
+
+        [Parameter(Mandatory)]
+        [ValidateNotNullOrEmpty()]
+        [String] $WorkspaceId,
+        
+        [Parameter(Mandatory)]
+        [ValidateNotNullOrEmpty()]
+        [String] $WorkspaceSharedKey
+    )
+
+    Get-AzStorageBlob -Container $WatchlistStorageAccountIncomingContainerName -Blob watchlist_*.csv -Context $context | ForEach-Object { 
+        Write-Host "Processing file '$($_.name)'"
+    
+        # Log type only supports alpha characters. It does not support numerics or special characters
+        $WatchlistName = [System.IO.Path]::GetFileNameWithoutExtension($_.Name) -replace 'watchlist_','' -replace '[^a-zA-Z]', ''
+    
+        # Get the Contents of the CSV file from Azure Storage
+        $contents = $_.ICloudBlob.DownloadText() # or this ? $_ | Get-AzStorageBlobContent
+    
+        # Get the content hash from storage
+        # $md5_hash = $_.ICloudBlob.Properties.ContentMD5
+        # or Compute a hash which we will use to identify related records once imported
+        $sha256_hash = Get-FileHash -InputStream ([System.IO.MemoryStream]::New([System.Text.Encoding]::UTF8.GetBytes($contents))) -Algorithm SHA256 | Select -ExpandProperty Hash
+    
+        # Import the Watchlist CSV contents into custom log analytics table for use later
+        $contents | Import-Watchlist -WatchlistName $WatchlistName -WorkspaceId $WorkspaceId -WorkspaceSharedKey $WorkspaceSharedKey -FileContentSHA256 $sha256_hash
+    
+        # Move the blob to the completed container - works only for block blobs
+        # $_ | Copy-AzStorageBlob -DestContainer $env:APPSETTING_WATCHLIST_STORAGE_COMPLETED_CONTAINER_NAME -DestBlob $_.Name -Context $context -Force
+        
+        # Remove the incoming blob as we have completed the import
+        # Remove-AzStorageBlob -Blob $_.name -Container $env:APPSETTING_WATCHLIST_STORAGE_INCOMING_CONTAINER_NAME -Context $context -Force
+    
+        $created_date = [DateTime]::UtcNow.ToString("yyyyMMdd")
+    
+        if($_.ICloudBlob.Properties.Created.HasValue)
+        {
+            $created_date = $_.ICloudBlob.Properties.Created.Value.ToString("yyyyMMdd")
+        }
+    
+        $blobCopyAction = Start-AzStorageBlobCopy `
+            -CloudBlob  $_.ICloudBlob `
+            -DestBlob "$($_.Name).$($created_date)" `
+            -Context $context `
+            -DestContainer $WatchlistStorageAccountCompletedContainerName `
+            -Force
+      
+        $status = $blobCopyAction | Get-AzStorageBlobCopyState -Context $context -WaitForComplete
+     
+        if($status.Status -eq 'Success')
+        {
+            $_ | Remove-AzStorageBlob -Force
+            Write-Host "Moved file '$($_.name)' from '$($WatchlistStorageAccountIncomingContainerName)' to '$($WatchlistStorageAccountCompletedContainerName)'."
+        }
+    
+        Write-Host "Completed Processing file '$($_.name)'"
+    }    
+}
+
 
 # Main Entrypoint
 # Connect-AzAccount -Identity
@@ -205,50 +283,7 @@ Set-AzContext -Subscription $env:APPSETTING_WATCHLIST_STORAGE_SUBSCRIPTION_ID
 
 $context = New-AzStorageContext -StorageAccountName $env:APPSETTING_WATCHLIST_STORAGE_ACCOUNT_NAME -UseConnectedAccount
 
-Get-AzStorageBlob -Container $env:APPSETTING_WATCHLIST_STORAGE_INCOMING_CONTAINER_NAME -Blob watchlist_*.csv -Context $context | ForEach-Object { 
-    Write-Host "Processing file '$($_.name)'"
+Import-FromBlobStorage -Context $context -WorkspaceSharedKey $env:APPSETTING_WATCHLIST_WORKSPACE_SHARED_KEY `
+                        -WorkspaceId $env:APPSETTING_WATCHLIST_WORKSPACE_ID -WatchlistStorageAccountIncomingContainerName $env:APPSETTING_WATCHLIST_STORAGE_INCOMING_CONTAINER_NAME `
+                        -WatchlistStorageAccountCompletedContainerName $env:APPSETTING_WATCHLIST_STORAGE_COMPLETED_CONTAINER_NAME
 
-    # Log type only supports alpha characters. It does not support numerics or special characters
-    $WatchlistName = [System.IO.Path]::GetFileNameWithoutExtension($_.Name) -replace 'watchlist_','' -replace '[^a-zA-Z]', ''
-
-    # Get the Contents of the CSV file from Azure Storage
-    $contents = $_.ICloudBlob.DownloadText() # or this ? $_ | Get-AzStorageBlobContent
-
-    # Get the content hash from storage
-    # $md5_hash = $_.ICloudBlob.Properties.ContentMD5
-    # or Compute a hash which we will use to identify related records once imported
-    $sha256_hash = Get-FileHash -InputStream ([System.IO.MemoryStream]::New([System.Text.Encoding]::UTF8.GetBytes($contents))) -Algorithm SHA256 | Select -ExpandProperty Hash
-
-    # Import the Watchlist CSV contents into custom log analytics table for use later
-    $contents | Import-Watchlist -WatchlistName $WatchlistName -WorkspaceId $env:APPSETTING_WATCHLIST_WORKSPACE_ID -WorkspaceSharedKey $env:APPSETTING_WATCHLIST_WORKSPACE_SHARED_KEY -FileContentSHA256 $sha256_hash
-
-    # Move the blob to the completed container - works only for block blobs
-    # $_ | Copy-AzStorageBlob -DestContainer $env:APPSETTING_WATCHLIST_STORAGE_COMPLETED_CONTAINER_NAME -DestBlob $_.Name -Context $context -Force
-    
-    # Remove the incoming blob as we have completed the import
-    # Remove-AzStorageBlob -Blob $_.name -Container $env:APPSETTING_WATCHLIST_STORAGE_INCOMING_CONTAINER_NAME -Context $context -Force
-
-    $created_date = [DateTime]::UtcNow.ToString("yyyyMMdd")
-
-    if($_.ICloudBlob.Properties.Created.HasValue)
-    {
-        $created_date = $_.ICloudBlob.Properties.Created.Value.ToString("yyyyMMdd")
-    }
-
-    $blobCopyAction = Start-AzStorageBlobCopy `
-        -CloudBlob  $_.ICloudBlob `
-        -DestBlob "$($_.Name).$($created_date)" `
-        -Context $context `
-        -DestContainer $env:APPSETTING_WATCHLIST_STORAGE_COMPLETED_CONTAINER_NAME `
-        -Force
-  
-    $status = $blobCopyAction | Get-AzStorageBlobCopyState -Context $context -WaitForComplete
- 
-    if($status.Status -eq 'Success')
-    {
-        $_ | Remove-AzStorageBlob -Force
-        Write-Host "Moved file '$($_.name)' from '$($env:APPSETTING_WATCHLIST_STORAGE_INCOMING_CONTAINER_NAME)' to '$($env:APPSETTING_WATCHLIST_STORAGE_COMPLETED_CONTAINER_NAME)'."
-    }
-
-    Write-Host "Completed Processing file '$($_.name)'"
-}
