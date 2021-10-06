@@ -204,11 +204,7 @@ function Import-FromBlobStorage
     param(
         [Parameter(Mandatory)]
         [ValidateNotNullOrEmpty()]
-        [AzureStorageContext] $Context,
-
-        [Parameter(Mandatory)]
-        [ValidateNotNullOrEmpty()]
-        [String] $WatchlistStorageAccountName,
+        [Microsoft.WindowsAzure.Commands.Storage.AzureStorageContext] $Context,
 
         [Parameter(Mandatory)]
         [ValidateNotNullOrEmpty()]
