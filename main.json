@@ -1,0 +1,365 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "metadata": {
+    "_generator": {
+      "name": "bicep",
+      "version": "0.4.613.9944",
+      "templateHash": "11918513457482293201"
+    }
+  },
+  "parameters": {
+    "location": {
+      "type": "string",
+      "defaultValue": "[resourceGroup().location]"
+    },
+    "watchlistStorageAccountName": {
+      "type": "string",
+      "defaultValue": ""
+    },
+    "watchlistStorageAccountFileShareName": {
+      "type": "string",
+      "defaultValue": ""
+    },
+    "watchlistStorageAccountFileShareAccessKey": {
+      "type": "string",
+      "defaultValue": ""
+    },
+    "watchlistStorageAccountIncomingContainerOrDirectoryName": {
+      "type": "string",
+      "defaultValue": "incoming"
+    },
+    "watchlistStorageAccountCompletedContainerOrDirectoryName": {
+      "type": "string",
+      "defaultValue": "imported"
+    },
+    "watchlistStorageSubscriptionId": {
+      "type": "string",
+      "defaultValue": ""
+    },
+    "watchlistWorkspaceId": {
+      "type": "string",
+      "defaultValue": ""
+    },
+    "workspaceSharedKey": {
+      "type": "string",
+      "defaultValue": ""
+    },
+    "appNameSuffix": {
+      "type": "string",
+      "defaultValue": "[uniqueString(resourceGroup().id)]"
+    }
+  },
+  "functions": [],
+  "variables": {
+    "functionAppName": "[format('functionapp-{0}', parameters('appNameSuffix'))]",
+    "vaultName": "[format('vault-{0}', parameters('appNameSuffix'))]",
+    "appServiceName": "[format('appservice-{0}', parameters('appNameSuffix'))]",
+    "blobAppSettings": [
+      {
+        "name": "WATCHLIST_STORAGE_INCOMING_CONTAINER_NAME",
+        "value": "[parameters('watchlistStorageAccountIncomingContainerOrDirectoryName')]"
+      },
+      {
+        "name": "WATCHLIST_STORAGE_COMPLETED_CONTAINER_NAME",
+        "value": "[parameters('watchlistStorageAccountCompletedContainerOrDirectoryName')]"
+      }
+    ],
+    "fileAppSettings": [
+      {
+        "name": "WATCHLIST_STORAGE_ACCOUNT_FILE_SHARE_NAME",
+        "value": "[parameters('watchlistStorageAccountFileShareName')]"
+      },
+      {
+        "name": "WATCHLIST_STORAGE_INCOMING_DIRECTORY_NAME",
+        "value": "[parameters('watchlistStorageAccountIncomingContainerOrDirectoryName')]"
+      },
+      {
+        "name": "WATCHLIST_STORAGE_COMPLETED_DIRECTORY_NAME",
+        "value": "[parameters('watchlistStorageAccountCompletedContainerOrDirectoryName')]"
+      },
+      {
+        "name": "WATCHLIST_STORAGE_ACCOUNT_FILE_SHARE_ACCESS_KEY",
+        "value": "[format('@Microsoft.KeyVault(SecretUri=https://{0}.vault.azure.net/secrets/WATCHLIST-STORAGE-ACCOUNT-FILE-SHARE-ACCESS-KEY)', variables('vaultName'))]"
+      }
+    ],
+    "storageAccountName": "[format('sta{0}', replace(parameters('appNameSuffix'), '-', ''))]"
+  },
+  "resources": [
+    {
+      "type": "Microsoft.Storage/storageAccounts",
+      "apiVersion": "2019-06-01",
+      "name": "[variables('storageAccountName')]",
+      "location": "[parameters('location')]",
+      "sku": {
+        "name": "Standard_LRS"
+      },
+      "kind": "StorageV2",
+      "properties": {
+        "supportsHttpsTrafficOnly": true,
+        "encryption": {
+          "services": {
+            "file": {
+              "keyType": "Account",
+              "enabled": true
+            },
+            "blob": {
+              "keyType": "Account",
+              "enabled": true
+            }
+          },
+          "keySource": "Microsoft.Storage"
+        },
+        "accessTier": "Hot"
+      }
+    },
+    {
+      "type": "Microsoft.Storage/storageAccounts/blobServices",
+      "apiVersion": "2019-06-01",
+      "name": "[format('{0}/{1}', variables('storageAccountName'), 'default')]",
+      "properties": {
+        "cors": {
+          "corsRules": []
+        },
+        "deleteRetentionPolicy": {
+          "enabled": true,
+          "days": 7
+        }
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Storage/storageAccounts', variables('storageAccountName'))]"
+      ]
+    },
+    {
+      "type": "Microsoft.Web/serverfarms",
+      "apiVersion": "2021-01-15",
+      "name": "[variables('appServiceName')]",
+      "location": "[parameters('location')]",
+      "kind": "functionapp",
+      "sku": {
+        "name": "Y1",
+        "tier": "Dynamic",
+        "size": "Y1",
+        "family": "Y",
+        "capacity": 0
+      },
+      "properties": {
+        "perSiteScaling": false,
+        "maximumElasticWorkerCount": 1,
+        "isSpot": false,
+        "reserved": false,
+        "isXenon": false,
+        "hyperV": false,
+        "targetWorkerCount": 0,
+        "targetWorkerSizeId": 0
+      }
+    },
+    {
+      "type": "Microsoft.Web/sites",
+      "apiVersion": "2020-06-01",
+      "name": "[variables('functionAppName')]",
+      "location": "[parameters('location')]",
+      "kind": "functionapp",
+      "identity": {
+        "type": "SystemAssigned"
+      },
+      "properties": {
+        "enabled": true,
+        "hostNameSslStates": [
+          {
+            "name": "[format('{0}.azurewebsites.net', variables('functionAppName'))]",
+            "sslState": "Disabled",
+            "hostType": "Standard"
+          },
+          {
+            "name": "[format('{0}.scm.azurewebsites.net', variables('functionAppName'))]",
+            "sslState": "Disabled",
+            "hostType": "Standard"
+          }
+        ],
+        "serverFarmId": "[resourceId('Microsoft.Web/serverfarms', variables('appServiceName'))]",
+        "reserved": false,
+        "isXenon": false,
+        "hyperV": false,
+        "siteConfig": {
+          "appSettings": "[union(createArray(createObject('name', 'AzureWebJobsStorage', 'value', format('DefaultEndpointsProtocol=https;AccountName={0};EndpointSuffix={1};AccountKey={2}', variables('storageAccountName'), environment().suffixes.storage, listKeys(resourceId('Microsoft.Storage/storageAccounts', variables('storageAccountName')), '2019-06-01').keys[0].value)), createObject('name', 'WEBSITE_CONTENTAZUREFILECONNECTIONSTRING', 'value', format('DefaultEndpointsProtocol=https;AccountName={0};EndpointSuffix={1};AccountKey={2}', variables('storageAccountName'), environment().suffixes.storage, listKeys(resourceId('Microsoft.Storage/storageAccounts', variables('storageAccountName')), '2019-06-01').keys[0].value)), createObject('name', 'FUNCTIONS_WORKER_RUNTIME', 'value', 'powershell'), createObject('name', 'FUNCTIONS_EXTENSION_VERSION', 'value', '~3'), createObject('name', 'WATCHLIST_STORAGE_ACCOUNT_NAME', 'value', parameters('watchlistStorageAccountName')), createObject('name', 'WATCHLIST_STORAGE_SUBSCRIPTION_ID', 'value', parameters('watchlistStorageSubscriptionId')), createObject('name', 'WATCHLIST_WORKSPACE_ID', 'value', parameters('watchlistWorkspaceId')), createObject('name', 'WATCHLIST_WORKSPACE_SHARED_KEY', 'value', format('@Microsoft.KeyVault(SecretUri=https://{0}.vault.azure.net/secrets/WATCHLIST-WORKSPACE-SHARED-KEY)', variables('vaultName')))), if(empty(parameters('watchlistStorageAccountFileShareName')), variables('blobAppSettings'), variables('fileAppSettings')))]"
+        },
+        "scmSiteAlsoStopped": false,
+        "clientAffinityEnabled": false,
+        "clientCertEnabled": false,
+        "hostNamesDisabled": false,
+        "dailyMemoryTimeQuota": 0,
+        "httpsOnly": true,
+        "redundancyMode": "None"
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Web/serverfarms', variables('appServiceName'))]",
+        "[resourceId('Microsoft.Storage/storageAccounts', variables('storageAccountName'))]"
+      ]
+    },
+    {
+      "type": "Microsoft.Web/sites/config",
+      "apiVersion": "2021-01-15",
+      "name": "[format('{0}/{1}', variables('functionAppName'), 'web')]",
+      "properties": {
+        "numberOfWorkers": -1,
+        "defaultDocuments": [
+          "Default.htm",
+          "Default.html",
+          "Default.asp",
+          "index.htm",
+          "index.html",
+          "iisstart.htm",
+          "default.aspx",
+          "index.php",
+          "hostingstart.html"
+        ],
+        "netFrameworkVersion": "v4.0",
+        "phpVersion": "5.6",
+        "powerShellVersion": "~7",
+        "requestTracingEnabled": false,
+        "remoteDebuggingEnabled": false,
+        "httpLoggingEnabled": false,
+        "logsDirectorySizeLimit": 35,
+        "detailedErrorLoggingEnabled": false,
+        "publishingUsername": "[format('${0}', variables('functionAppName'))]",
+        "scmType": "None",
+        "use32BitWorkerProcess": true,
+        "webSocketsEnabled": false,
+        "alwaysOn": false,
+        "managedPipelineMode": "Integrated",
+        "virtualApplications": [
+          {
+            "virtualPath": "/",
+            "physicalPath": "site\\wwwroot",
+            "preloadEnabled": true
+          }
+        ],
+        "loadBalancing": "LeastRequests",
+        "experiments": {
+          "rampUpRules": []
+        },
+        "autoHealEnabled": false,
+        "cors": {
+          "allowedOrigins": [
+            "https://functions.azure.com",
+            "https://functions-staging.azure.com",
+            "https://functions-next.azure.com"
+          ],
+          "supportCredentials": false
+        },
+        "localMySqlEnabled": false,
+        "ipSecurityRestrictions": [
+          {
+            "ipAddress": "Any",
+            "action": "Allow",
+            "priority": 1,
+            "name": "Allow all",
+            "description": "Allow all access"
+          }
+        ],
+        "scmIpSecurityRestrictions": [
+          {
+            "ipAddress": "Any",
+            "action": "Allow",
+            "priority": 1,
+            "name": "Allow all",
+            "description": "Allow all access"
+          }
+        ],
+        "scmIpSecurityRestrictionsUseMain": false,
+        "http20Enabled": true,
+        "minTlsVersion": "1.2",
+        "ftpsState": "AllAllowed",
+        "preWarmedInstanceCount": 0
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Web/sites', variables('functionAppName'))]"
+      ]
+    },
+    {
+      "type": "Microsoft.Web/sites/hostNameBindings",
+      "apiVersion": "2020-06-01",
+      "name": "[format('{0}/{1}', variables('functionAppName'), format('{0}.azurewebsites.net', variables('functionAppName')))]",
+      "properties": {
+        "siteName": "[variables('functionAppName')]",
+        "hostNameType": "Verified"
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Web/sites', variables('functionAppName'))]"
+      ]
+    },
+    {
+      "type": "Microsoft.KeyVault/vaults",
+      "apiVersion": "2019-09-01",
+      "name": "[variables('vaultName')]",
+      "location": "[parameters('location')]",
+      "properties": {
+        "tenantId": "[subscription().tenantId]",
+        "sku": {
+          "family": "A",
+          "name": "standard"
+        },
+        "accessPolicies": [
+          {
+            "tenantId": "[subscription().tenantId]",
+            "objectId": "[reference(resourceId('Microsoft.Web/sites', variables('functionAppName')), '2020-06-01', 'Full').identity.principalId]",
+            "permissions": {
+              "keys": [],
+              "secrets": [
+                "get",
+                "list"
+              ],
+              "certificates": []
+            }
+          }
+        ],
+        "enabledForDeployment": false,
+        "enabledForDiskEncryption": false,
+        "enabledForTemplateDeployment": false,
+        "softDeleteRetentionInDays": 90,
+        "enableRbacAuthorization": false,
+        "networkAcls": {
+          "ipRules": [],
+          "virtualNetworkRules": []
+        }
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Web/sites', variables('functionAppName'))]"
+      ]
+    },
+    {
+      "type": "Microsoft.KeyVault/vaults/secrets",
+      "apiVersion": "2018-02-14",
+      "name": "[format('{0}/WATCHLIST-WORKSPACE-SHARED-KEY', variables('vaultName'))]",
+      "properties": {
+        "value": "[parameters('workspaceSharedKey')]"
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.KeyVault/vaults', variables('vaultName'))]"
+      ]
+    },
+    {
+      "condition": "[not(empty(parameters('watchlistStorageAccountFileShareAccessKey')))]",
+      "type": "Microsoft.KeyVault/vaults/secrets",
+      "apiVersion": "2018-02-14",
+      "name": "[format('{0}/WATCHLIST-STORAGE-ACCOUNT-FILE-SHARE-ACCESS-KEY', variables('vaultName'))]",
+      "properties": {
+        "value": "[parameters('watchlistStorageAccountFileShareAccessKey')]"
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.KeyVault/vaults', variables('vaultName'))]"
+      ]
+    }
+  ],
+  "outputs": {
+    "functionAppName": {
+      "type": "string",
+      "value": "[variables('functionAppName')]"
+    },
+    "functionPrincipalId": {
+      "type": "string",
+      "value": "[reference(resourceId('Microsoft.Web/sites', variables('functionAppName')), '2020-06-01', 'Full').identity.principalId]"
+    }
+  }
+}
