@@ -1,8 +1,10 @@
 // original file - https://github.com/Azure/bicep/blob/main/docs/examples/101/function-app-create/main.bicep
 param location string = resourceGroup().location
 param watchlistStorageAccountName string = ''
-param watchlistStorageAccountIncomingContainerName string = 'incoming'
-param watchlistStorageAccountCompletedContainerName string = 'imported'
+param watchlistStorageAccountFileShareName string = ''
+param watchlistStorageAccountFileShareAccessKey string = ''
+param watchlistStorageAccountIncomingContainerOrDirectoryName string = 'incoming'
+param watchlistStorageAccountCompletedContainerOrDirectoryName string = 'imported'
 param watchlistStorageSubscriptionId string = ''
 param watchlistWorkspaceId string = ''
 param workspaceSharedKey string = ''
@@ -12,6 +14,36 @@ param appNameSuffix string = uniqueString(resourceGroup().id)
 var functionAppName = 'functionapp-${appNameSuffix}'
 var vaultName = 'vault-${appNameSuffix}'
 var appServiceName = 'appservice-${appNameSuffix}'
+
+var blobAppSettings = [
+{
+  name: 'WATCHLIST_STORAGE_INCOMING_CONTAINER_NAME'
+  value: watchlistStorageAccountIncomingContainerOrDirectoryName
+}
+{
+  name: 'WATCHLIST_STORAGE_COMPLETED_CONTAINER_NAME'
+  value: watchlistStorageAccountCompletedContainerOrDirectoryName
+}
+]
+
+var fileAppSettings = [
+  {
+    name: 'WATCHLIST_STORAGE_ACCOUNT_FILE_SHARE_NAME'
+    value: watchlistStorageAccountFileShareName
+  }
+  {
+    name: 'WATCHLIST_STORAGE_INCOMING_DIRECTORY_NAME'
+    value: watchlistStorageAccountIncomingContainerOrDirectoryName
+  }
+  {
+    name: 'WATCHLIST_STORAGE_COMPLETED_DIRECTORY_NAME'
+    value: watchlistStorageAccountCompletedContainerOrDirectoryName
+  }
+  {
+    name: 'WATCHLIST_STORAGE_ACCOUNT_FILE_SHARE_ACCESS_KEY'
+    value: '@Microsoft.KeyVault(SecretUri=https://${vaultName}.vault.azure.net/secrets/WATCHLIST-STORAGE-ACCOUNT-FILE-SHARE-ACCESS-KEY)'
+  }
+  ]
 
 // remove dashes for storage account name
 var storageAccountName = format('sta{0}', replace(appNameSuffix, '-', ''))
@@ -110,7 +142,7 @@ resource functionApp 'Microsoft.Web/sites@2020-06-01' = {
     isXenon: false
     hyperV: false
     siteConfig: {
-      appSettings: [
+      appSettings: union([
         {
           name: 'AzureWebJobsStorage'
           value: 'DefaultEndpointsProtocol=https;AccountName=${storageAccount.name};EndpointSuffix=${environment().suffixes.storage};AccountKey=${storageAccount.listKeys().keys[0].value}'
@@ -130,15 +162,7 @@ resource functionApp 'Microsoft.Web/sites@2020-06-01' = {
         {
           name: 'WATCHLIST_STORAGE_ACCOUNT_NAME'
           value: watchlistStorageAccountName
-        }
-        {
-          name: 'WATCHLIST_STORAGE_INCOMING_CONTAINER_NAME'
-          value: watchlistStorageAccountIncomingContainerName
-        }
-        {
-          name: 'WATCHLIST_STORAGE_COMPLETED_CONTAINER_NAME'
-          value: watchlistStorageAccountCompletedContainerName
-        }
+        } 
         {
           name: 'WATCHLIST_STORAGE_SUBSCRIPTION_ID'
           value: watchlistStorageSubscriptionId
@@ -151,7 +175,7 @@ resource functionApp 'Microsoft.Web/sites@2020-06-01' = {
           name: 'WATCHLIST_WORKSPACE_SHARED_KEY'
           value: '@Microsoft.KeyVault(SecretUri=https://${vaultName}.vault.azure.net/secrets/WATCHLIST-WORKSPACE-SHARED-KEY)'
         }
-      ]
+      ], empty(watchlistStorageAccountFileShareName) ?  blobAppSettings : fileAppSettings)
     }
     scmSiteAlsoStopped: false
     clientAffinityEnabled: false
@@ -293,6 +317,13 @@ resource secret 'Microsoft.KeyVault/vaults/secrets@2018-02-14' = {
   name: '${keyvault.name}/WATCHLIST-WORKSPACE-SHARED-KEY'
   properties: {
     value: workspaceSharedKey
+  }
+}
+
+resource secret1 'Microsoft.KeyVault/vaults/secrets@2018-02-14' = if (!empty(watchlistStorageAccountFileShareAccessKey)) {
+  name: '${keyvault.name}/WATCHLIST-STORAGE-ACCOUNT-FILE-SHARE-ACCESS-KEY'
+  properties: {
+    value: watchlistStorageAccountFileShareAccessKey
   }
 }
 

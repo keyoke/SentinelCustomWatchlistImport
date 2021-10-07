@@ -6,11 +6,11 @@ This repository provides a custom watchlist import solution which can be used to
 ![Solution Overview](images/solution-overview.png)
 
 The custom import process is as follows:
-1. A CSV file with the naming convention "watchlist_[LOG_ANALYTICS_TABLE_NAME].csv" is dropped into the "incoming" Blob Storage container.
-1. The Azure Function (ImportWatchlistDaily) is scheduled to run once a day on a CRON schedule "0 * 0 * * *", once triggered the function checks the "incoming" container for new watchlists.
+1. A CSV file with the naming convention "watchlist_[LOG_ANALYTICS_TABLE_NAME].csv" is dropped into the "incoming" Blob Storage container or File Share Directory.
+1. The Azure Function (ImportWatchlistDaily) is scheduled to run once a day on a CRON schedule "0 * 0 * * *", once triggered the function checks the "incoming" container or directory for new watchlists.
 1. When a new watchlist arrives the contents of the file is hashed and the rows are converted to JSON, each row is inserted into a custom table in the Log Analytics Workspace. 
-1. Once the file is processed it is moved to the "imported" Blob Storage Container.
-1. When querying the data we can use the TimeGenerated property to group related rows which were imported at the same time.
+1. Once the file is processed it is moved to the "imported" Blob Storage Container or File Share Directory.
+1. When querying the data we can use the TimeGenerated property and optional the file contents hash to group related rows which were imported at the same time.
 
 # Requirements
 - Azure CLI 2.x
@@ -23,7 +23,7 @@ This solution also requires an existing Azure Storage Account where the CSV will
 - imported
 
 # Deployment Steps
-Run the provided Shell script
+Run the provided Shell script when leveraging Azure Blob Storage
 
 - ./deploy.sh [RESOURCE_GROUP] [LOCATION] [STORAGE_ACCOUNT_NAME] [STORAGE_ACCOUNT_RESOURCE_GROUP] [STORAGE_ACCOUNT_SUBSCRIPTION_ID] [WATCHLIST_WORKSPACE_ID] [WATCHLIST_WORKSPACE_SHARED_KEY] 
 
@@ -35,6 +35,10 @@ or manually execute the deployment using the steps below:
 1. az role assignment create --role "Storage Blob Data Contributor" --assignee [FUNCTION_PRINCIPAL_ID] --scope "/subscriptions/[STORAGE_ACCOUNT_SUBSCRIPTION_ID]/resourceGroups/[STORAGE_ACCOUNT_RESOURCE_GROUP]/providers/Microsoft.Storage/storageAccounts/[STORAGE_ACCOUNT_NAME]"
 1. cd functionapp/
 1. func azure functionapp publish [FUNCTION_APP_NAME]
+
+Optionally you can leverage an Azure File Share, if you have enabled [Identity-based authentication](https://docs.microsoft.com/en-us/azure/storage/files/storage-files-identity-ad-ds-assign-permissions?tabs=azure-portal) on your Azure File Share you may omit the optional [STORAGE_ACCOUNT_FILE_SHARE_ACCESS_KEY] parameter.
+
+- ./deploy.sh [RESOURCE_GROUP] [LOCATION] [STORAGE_ACCOUNT_NAME] [STORAGE_ACCOUNT_RESOURCE_GROUP] [STORAGE_ACCOUNT_SUBSCRIPTION_ID] [WATCHLIST_WORKSPACE_ID] [WATCHLIST_WORKSPACE_SHARED_KEY] [STORAGE_ACCOUNT_FILE_SHARE_NAME] [STORAGE_ACCOUNT_FILE_SHARE_ACCESS_KEY]
 
 
 # Azure Sentinel
