@@ -335,7 +335,7 @@ function Import-FromFileStorage
      
         if($status.Status -eq 'Success')
         {
-            $_ | Remove-AzStorageFile -Force
+            $_ | Remove-AzStorageFile
             Write-Host "Moved file '$($_.name)' from '$($WatchlistStorageAccountIncomingDirectoryName)' to '$($WatchlistStorageAccountCompletedDirectoryName)'."
         }
     
@@ -365,6 +365,7 @@ if(Test-Path env:APPSETTING_WATCHLIST_STORAGE_ACCOUNT_FILE_SHARE_NAME)
 else
 {
     $context = New-AzStorageContext -StorageAccountName $env:APPSETTING_WATCHLIST_STORAGE_ACCOUNT_NAME -UseConnectedAccount
+    
     Import-FromBlobStorage -Context $context -WorkspaceSharedKey $env:APPSETTING_WATCHLIST_WORKSPACE_SHARED_KEY `
                             -WorkspaceId $env:APPSETTING_WATCHLIST_WORKSPACE_ID -WatchlistStorageAccountIncomingContainerName $env:APPSETTING_WATCHLIST_STORAGE_INCOMING_CONTAINER_NAME `
                             -WatchlistStorageAccountCompletedContainerName $env:APPSETTING_WATCHLIST_STORAGE_COMPLETED_CONTAINER_NAME
