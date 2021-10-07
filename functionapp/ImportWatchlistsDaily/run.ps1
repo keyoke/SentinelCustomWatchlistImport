@@ -301,7 +301,7 @@ function Import-FromFileStorage
         [String] $WorkspaceSharedKey
     )
 
-     Get-AzStorageFile -context $context -ShareName $WatchlistStorageAccountFileShareName -Path $WatchlistStorageAccountIncomingDirectoryName -Context $context | Get-AzStorageFile | where {$_.Name -like "watchlist_*.csv"} | ForEach-Object { 
+     Get-AzStorageFile -context $context -ShareName $WatchlistStorageAccountFileShareName -Path $WatchlistStorageAccountIncomingDirectoryName | Get-AzStorageFile | where {$_.Name -like "watchlist_*.csv"} | ForEach-Object { 
         Write-Host "Processing file '$($_.name)'"
     
         # Log type only supports alpha characters. It does not support numerics or special characters
@@ -361,8 +361,6 @@ if(Test-Path env:APPSETTING_WATCHLIST_STORAGE_ACCOUNT_FILE_SHARE_NAME)
     Import-FromFileStorage -Context $context -WorkspaceSharedKey $env:APPSETTING_WATCHLIST_WORKSPACE_SHARED_KEY `
                             -WorkspaceId $env:APPSETTING_WATCHLIST_WORKSPACE_ID -WatchlistStorageAccountIncomingDirectoryName $env:APPSETTING_WATCHLIST_STORAGE_INCOMING_DIRECTORY_NAME `
                             -WatchlistStorageAccountCompletedDirectoryName $env:APPSETTING_WATCHLIST_STORAGE_COMPLETED_DIRECTORY_NAME -WatchlistStorageAccountFileShareName $env:APPSETTING_WATCHLIST_STORAGE_ACCOUNT_FILE_SHARE_NAME
-                            $context = New-AzStorageContext -StorageAccountName $env:APPSETTING_WATCHLIST_STORAGE_ACCOUNT_NAME -UseConnectedAccount
-
 }
 else
 {
