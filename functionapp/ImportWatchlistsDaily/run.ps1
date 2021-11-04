@@ -46,6 +46,9 @@ function Import-Watchlist
     # Array for buffering records
     $records = @()
 
+    # Ensure all imported records from same file have the same time generated
+    $timeGenerated = Get-Date
+
     # Loop through each row in the csv
     for ($i = 0 ; $i -lt $csv.length ; $i++) { 
         # Get our current record
@@ -57,7 +60,7 @@ function Import-Watchlist
             Write-Information "Maximum of $($MAX_JSON_PAYLOAD_SIZE_MB) MB per post to Log Analytics Data Collector API automatically batching requests."
 
             # Create records from current buffer
-            Send-DataCollectorRequest -records $records -WatchlistName $WatchlistName -WorkspaceId $WorkspaceId -WorkspaceSharedKey $WorkspaceSharedKey
+            Send-DataCollectorRequest -records $records -WatchlistName $WatchlistName -WorkspaceId $WorkspaceId -WorkspaceSharedKey $WorkspaceSharedKey -TimeGenerated $timeGenerated
 
             # Clear the buffer in preperation for next iteration
             $records = @()
@@ -72,7 +75,7 @@ function Import-Watchlist
     if($records.Length -gt 0)
     {
         # Create remaining records
-        Send-DataCollectorRequest -records $records -WatchlistName $WatchlistName -WorkspaceId $WorkspaceId -WorkspaceSharedKey $WorkspaceSharedKey
+        Send-DataCollectorRequest -records $records -WatchlistName $WatchlistName -WorkspaceId $WorkspaceId -WorkspaceSharedKey $WorkspaceSharedKey -TimeGenerated $timeGenerated
     }
 
     Write-Host "Completed Watchlist '$WatchlistName' import."
@@ -140,7 +143,11 @@ function Send-DataCollectorRequest
 
         [Parameter(Mandatory)]
         [ValidateNotNullOrEmpty()]
-        [String] $WorkspaceSharedKey
+        [String] $WorkspaceSharedKey,
+
+        [Parameter(Mandatory)]
+        [ValidateNotNullOrEmpty()]
+        [String] $TimeGenerated
     )
     $json_body = $records | ConvertTo-Json -Depth 99 -Compress
 
@@ -152,7 +159,7 @@ function Send-DataCollectorRequest
         "Authorization"        = "SharedKey {0}:{1}" -f  $WorkspaceId, $signature;
         "Log-Type"             = $WatchlistName;
         "x-ms-date"            = $($Xmsdate.ToString("r"));
-        "time-generated-field" = $(Get-Date)
+        "time-generated-field" = $TimeGenerated
     }
 
     try {            
