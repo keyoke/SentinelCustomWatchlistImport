@@ -1,0 +1,10 @@
+{
+  "bindings": [
+    {
+      "name": "filter",
+      "type": "activityTrigger",
+      "activity": "GetBlobsWatchlistActivity",
+      "direction": "in"
+    }
+  ]
+}

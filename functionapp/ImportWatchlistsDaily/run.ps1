@@ -150,7 +150,7 @@ function Import-FromFileStorage
 
 # Main Entrypoint
 # Connect-AzAccount -Identity
-Set-AzContext -Subscription $env:APPSETTING_WATCHLIST_STORAGE_SUBSCRIPTION_ID
+# Set-AzContext -Subscription $env:APPSETTING_WATCHLIST_STORAGE_SUBSCRIPTION_ID
 
 if(Test-Path env:APPSETTING_WATCHLIST_STORAGE_ACCOUNT_FILE_SHARE_NAME)
 {
