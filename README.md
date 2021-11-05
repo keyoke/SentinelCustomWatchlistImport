@@ -64,3 +64,6 @@ It is also recommended that you set the [data retention on the custom table](htt
 ```powershell
 armclient PUT /subscriptions/[SUBSCRIPTION_ID]/resourceGroups/[RESOURCE_GROUP_NAME]/providers/Microsoft.OperationalInsights/workspaces/[WORKSPACE_NAME]/Tables/[LOG_ANALYTICS_TABLE_NAME]?api-version=2017-04-26-preview "{properties: {retentionInDays: 4}}"
 ```
+
+# Issues
+- "Timeout value of 00:05:00 exceeded by function", when dealing with large CSV files the functions execution time may be exceeding functionTimeout by default this is 5 min on consumption plan. You can configure custom functionTimeout from your host.json file on the consumption plab 10 min is the maximum timeout. In this scenario I would reccomend switching to the [Premium plan](https://docs.microsoft.com/en-us/azure/azure-functions/functions-premium-plan?tabs=portal) and increasing the timeout to a satisfactory value, see the following [link for more details](https://docs.microsoft.com/en-us/azure/azure-functions/functions-host-json#functiontimeout).
