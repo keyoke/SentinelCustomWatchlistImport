@@ -8,6 +8,7 @@
       }
     }
   },
+  "functionTimeout": "00:10:00",
   "managedDependency": {
     "enabled": true
   },
