@@ -37,7 +37,7 @@ else
     SCOPE_ID="/subscriptions/$STORAGE_ACCOUNT_SUBSCRIPTION_ID/resourceGroups/$STORAGE_ACCOUNT_RESOURCE_GROUP/providers/Microsoft.Storage/storageAccounts/$STORAGE_ACCOUNT_NAME"
     
     if [ -z ${STORAGE_ACCOUNT_FILE_SHARE_NAME} ]; then az role assignment create --assignee "$PRINCIPAL_ID" --role "Storage Blob Data Contributor" --scope "$SCOPE_ID"; fi
-    if [ -z ${STORAGE_ACCOUNT_FILE_SHARE_ACCESS_KEY} ]; then az role assignment create --assignee "$PRINCIPAL_ID" --role "Reader" --scope "$SCOPE_ID"; fi
+    if [ -z ${STORAGE_ACCOUNT_FILE_SHARE_ACCESS_KEY} ]; then az role assignment create --assignee "$PRINCIPAL_ID" --role "Storage File Data SMB Share Contributor" --scope "$SCOPE_ID"; fi
 
     # Finally publish our function app package
     (cd functionapp/; func azure functionapp publish $FUNCTION_APP)
