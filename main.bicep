@@ -97,21 +97,10 @@ resource appService 'Microsoft.Web/serverfarms@2021-01-15' = {
   location: location
   kind: 'functionapp'
   sku: {
-    name: 'Y1'
-    tier: 'Dynamic'
-    size: 'Y1'
-    family: 'Y'
-    capacity: 0
+    name: 'EP1'
   }
   properties: {
-    perSiteScaling: false
-    maximumElasticWorkerCount: 1
-    isSpot: false
     reserved: false
-    isXenon: false
-    hyperV: false
-    targetWorkerCount: 0
-    targetWorkerSizeId: 0
   }
 }
 
@@ -174,6 +163,18 @@ resource functionApp 'Microsoft.Web/sites@2020-06-01' = {
         {
           name: 'WATCHLIST_WORKSPACE_SHARED_KEY'
           value: '@Microsoft.KeyVault(SecretUri=https://${vaultName}.vault.azure.net/secrets/WATCHLIST-WORKSPACE-SHARED-KEY)'
+        }
+        {
+          name: 'AzureWebJobs.ImportWatchlistsDaily.Disabled'
+          value: 'true'
+        }
+        {
+          name: 'FUNCTIONS_WORKER_PROCESS_COUNT'
+          value: '1'
+        }
+        {
+          name: 'PSWorkerInProcConcurrencyUpperBound'
+          value: '5'
         }
       ], empty(watchlistStorageAccountFileShareName) ?  blobAppSettings : fileAppSettings)
     }
