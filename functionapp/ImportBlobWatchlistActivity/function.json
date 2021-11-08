@@ -1,0 +1,10 @@
+{
+  "bindings": [
+    {
+      "name": "BlobName",
+      "activity": "ImportBlobWatchlistActivity",
+      "type": "activityTrigger",
+      "direction": "in"
+    }
+  ]
+}
