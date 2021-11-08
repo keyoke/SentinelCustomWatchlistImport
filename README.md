@@ -7,7 +7,7 @@ This repository provides a custom watchlist import solution which can be used to
 
 The custom import process is as follows:
 1. A CSV file with the naming convention "watchlist_[LOG_ANALYTICS_TABLE_NAME].csv" is dropped into the "incoming" Blob Storage container or File Share Directory.
-1. The Azure Function (ImportWatchlistDaily) is scheduled to run once a day on a CRON schedule "0 * 0 * * *", once triggered the function checks the "incoming" container or directory for new watchlists.
+1. The Azure Function (ImportWatchlistOrchestratorTimer) is scheduled to run once a day on a CRON schedule "0 * 0 * * *", once triggered the function checks the "incoming" container or directory for new watchlists.
 1. When a new watchlist arrives the contents of the file is hashed and the rows are converted to JSON, each row is inserted into a custom table in the Log Analytics Workspace. 
 1. Once the file is processed it is moved to the "imported" Blob Storage Container or File Share Directory.
 1. When querying the data we can use the TimeGenerated property and optional the file contents hash to group related rows which were imported at the same time.
@@ -66,4 +66,5 @@ armclient PUT /subscriptions/[SUBSCRIPTION_ID]/resourceGroups/[RESOURCE_GROUP_NA
 ```
 
 # Issues
-- "Timeout value of 00:10:00 exceeded by function", when dealing with large CSV files the functions execution time may be exceeding functionTimeout by default this is 5 min on consumption plan. You can configure custom functionTimeout from your host.json file on the consumption plab 10 min is the maximum timeout. In this scenario I would reccomend switching to the [Premium plan](https://docs.microsoft.com/en-us/azure/azure-functions/functions-premium-plan?tabs=portal) and increasing the timeout to a satisfactory value, see the following [link for more details](https://docs.microsoft.com/en-us/azure/azure-functions/functions-host-json#functiontimeout).
+- "Timeout value of 00:10:00 exceeded by function", when dealing with large CSV files the functions execution time may be exceeding functionTimeout by default this is 5 min on consumption plan. You can configure custom functionTimeout from your host.json file on the consumption plan 10 min is the maximum timeout. In this scenario I would reccomend switching to the [Premium plan](https://docs.microsoft.com/en-us/azure/azure-functions/functions-premium-plan?tabs=portal) and increasing the timeout to a satisfactory value, see the following [link for more details](https://docs.microsoft.com/en-us/azure/azure-functions/functions-host-json#functiontimeout).
+- "Your function '[FUNCTION_NAME]' is queuing requests as there are no available runspaces. You may be able to increase your throughput by following the best practices on https://aka.ms/functions-powershell-concurrency.", the durable function version of the import solution allows us to fan out into multiple parallel watchlist imports. Leverage the FUNCTIONS_WORKER_PROCESS_COUNT and PSWorkerInProcConcurrencyUpperBound configuration settings to fine tune the amount of parallelism required.
