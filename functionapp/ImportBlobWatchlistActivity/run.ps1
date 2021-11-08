@@ -11,7 +11,7 @@ $blob = Get-AzStorageBlob -Container $env:APPSETTING_WATCHLIST_STORAGE_INCOMING_
 Write-Host "Processing blob '$($blob.name)'."
 
 # Log type only supports alpha characters. It does not support numerics or special characters
-$WatchlistName = [System.IO.Path]::GetFileNameWithoutExtension($blob.Name) -replace 'watchlist_','' -replace '[^a-zA-Z_]', ''
+$WatchlistName = [System.IO.Path]::GetFileNameWithoutExtension($blob.Name) -replace '^watchlist_','' -replace '[^a-zA-Z_]', ''
 
 Write-Host "Watchlist name '$($WatchlistName)'."
 

@@ -18,7 +18,7 @@ $file = Get-AzStorageFile -context $storageContext -ShareName $env:APPSETTING_WA
 Write-Host "Processing file '$($file.name)'."
 
 # Log type only supports alpha characters. It does not support numerics or special characters
-$WatchlistName = [System.IO.Path]::GetFileNameWithoutExtension($file.Name) -replace 'watchlist_','' -replace '[^a-zA-Z_]', ''
+$WatchlistName = [System.IO.Path]::GetFileNameWithoutExtension($file.Name) -replace '^watchlist_','' -replace '[^a-zA-Z_]', ''
 
 Write-Host "Watchlist name '$($WatchlistName)'."
 
