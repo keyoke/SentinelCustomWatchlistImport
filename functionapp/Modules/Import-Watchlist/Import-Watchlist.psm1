@@ -29,17 +29,16 @@ function Import-Watchlist
     )
 
     #optimzation for running non-interactively
-    $progressPreference = 'silentlyContinue' 
+    $progressPreference = 'silentlyContinue'
 
     Write-Host "Importing Watchlist '$WatchlistName'."
 
     $stream = [IO.MemoryStream]::new([Text.Encoding]::UTF8.GetBytes($FileContents))
     $reader = [IO.StreamReader]::new($stream)
-    $headers = $reader.ReadLine()
+    $headers = $reader.ReadLine() -split ","
 
     # Recommended maximum number of fields for a given type is 50. This is a practical limit from a usability and search experience perspective.
-    $field_count = ($headers -split ",").Length #($csv | get-member -type NoteProperty).count
-    if($field_count -gt $MAX_FIELD_LIMIT)
+    if($headers.Length -gt $MAX_FIELD_LIMIT)
     {
         Write-Warning "Recommended maximum number of fields for a given type is $MAX_FIELD_LIMIT."
     }
@@ -50,41 +49,46 @@ function Import-Watchlist
     # Ensure all imported records from same file have the same time generated
     $timeGenerated = Get-Date
 
-    while ( $row = $reader.ReadLine() ) {
+    $measured = Measure-Command {
+        while ( $line = $reader.ReadLine() ) {
 
-        $csv = "$headers`n$row" | ConvertFrom-Csv -Delim ','
+            # Get our current record
+            $current_record = Get-Record -headers $headers -values ($line -split ",") -FileContentSHA256 $FileContentSHA256
 
-        # Get our current record
-        $current_record = Get-Record -records $csv -index 0 -FileContentSHA256 $FileContentSHA256
+            if($null -ne $current_record)
+            {
+                $sizeInMB = ([System.Text.Encoding]::UTF8.GetByteCount(($records + $current_record  | ConvertTo-Json)) / 1MB)
 
-        # Maximum of 30 MB per post to Log Analytics Data Collector API. This is a size limit for a single post. If the data from a single post that exceeds 30 MB, you should split the data up to smaller sized chunks and send them concurrently.
-        if(([System.Text.Encoding]::UTF8.GetByteCount(($records + $current_record  | ConvertTo-Json -Depth 99 -Compress)) / 1MB) -ge $MAX_JSON_PAYLOAD_SIZE_MB)
-        {
-            Write-Host "Maximum of $($MAX_JSON_PAYLOAD_SIZE_MB) MB per post to Log Analytics Data Collector API automatically batching requests."
+                # Maximum of 30 MB per post to Log Analytics Data Collector API. This is a size limit for a single post. If the data from a single post that exceeds 30 MB, you should split the data up to smaller sized chunks and send them concurrently.
+                if( $sizeInMB -ge $MAX_JSON_PAYLOAD_SIZE_MB)
+                {
+                    Write-Host "Maximum of $($MAX_JSON_PAYLOAD_SIZE_MB) MB per post to Log Analytics Data Collector API automatically batching requests."
 
-            # Create records from current buffer
-            Send-DataCollectorRequest -records $records -WatchlistName $WatchlistName -WorkspaceId $WorkspaceId -WorkspaceSharedKey $WorkspaceSharedKey -TimeGenerated $timeGenerated
+                    # Create records from current buffer
+                    Send-DataCollectorRequest -records $records -WatchlistName $WatchlistName -WorkspaceId $WorkspaceId -WorkspaceSharedKey $WorkspaceSharedKey -TimeGenerated $timeGenerated
 
-            # Clear the buffer in preperation for next iteration
-            $records.Clear()
+                    # Clear the buffer in preperation for next iteration
+                    $records.Clear()
+                }
+
+                # Add current record to the buffer
+                $records += $current_record
+            }
         }
 
-        # Add current record to the buffer
-        $records += $current_record
+        # Do we have any records left to create
+        if($records.Length -gt 0)
+        {
+            Write-Host "Flushing remainder of batched requests $($records.Length)."
+            # Create remaining records
+            Send-DataCollectorRequest -records $records -WatchlistName $WatchlistName -WorkspaceId $WorkspaceId -WorkspaceSharedKey $WorkspaceSharedKey -TimeGenerated $timeGenerated
+        }
+
+        $reader.Dispose()
+        $stream.Dispose()
     }
 
-    # Do we have any records left to create
-    if($records.Length -gt 0)
-    {
-        Write-Host "Flushing remainder of batched requests $($records.Length)."
-        # Create remaining records
-        Send-DataCollectorRequest -records $records -WatchlistName $WatchlistName -WorkspaceId $WorkspaceId -WorkspaceSharedKey $WorkspaceSharedKey -TimeGenerated $timeGenerated
-    }
-
-    $reader.Dispose()
-    $stream.Dispose()
-
-    Write-Host "Completed Watchlist '$WatchlistName' import."
+    Write-Host "Completed Watchlist '$WatchlistName' import in $($measured.TotalSeconds)s."
 }
 
 function Get-Record
@@ -93,39 +97,40 @@ function Get-Record
     param(
         [Parameter(Mandatory)]
         [ValidateNotNullOrEmpty()]
-        [Array] $records,
+        [Array] $headers,
 
         [Parameter(Mandatory)]
         [ValidateNotNullOrEmpty()]
-        [int] $index,
+        [Array] $values,
 
         [Parameter(Mandatory)]
         [ValidateNotNullOrEmpty()]
         [String] $FileContentSHA256
     )
-    if(($index -ge 0) -and 
-        ($index -lt $records.Length))
+    if(($headers.Length -gt 0) -and
+        ($headers.Length -eq $values.Length))
     {
         $record = [ordered]@{}
 
-        $records[$index].PSObject.Properties | ForEach-Object {
+        for ($i = 0; $i -lt $headers.Length; $i++) {
             # Maximum of 32 KB limit for field values. If the field value is greater than 32 KB, the data will be truncated.
-            $sizeInKB = ([System.Text.Encoding]::UTF8.GetByteCount($_.Value) / 1KB)
+            $sizeInKB = ([System.Text.Encoding]::UTF8.GetByteCount($values[$i]) / 1KB)
+
             if($sizeInKB -gt $MAX_JSON_FIELD_VALUE_SIZE_KB)
             {
-                Write-Warning "Field '$($_.Name)' has a value which is larger than the Maximum of $($MAX_JSON_FIELD_VALUE_SIZE_KB) KB, the data will be truncated."
-                $record.Add($_.Name,[System.String]::new([System.Text.Encoding]::UTF8.GetBytes($_.Value), 0, $MAX_JSON_FIELD_VALUE_SIZE_KB))
+                Write-Warning "Field '$($headers[$i])' has a value which is larger than the Maximum of $($MAX_JSON_FIELD_VALUE_SIZE_KB) KB, the data will be truncated."
+                $record.Add($headers[$i],[System.String]::new([System.Text.Encoding]::UTF8.GetBytes($values[$i]), 0, $MAX_JSON_FIELD_VALUE_SIZE_KB))
             }
             else
             {
-                $record.Add($_.Name,$_.Value)
+                $record.Add($headers[$i],$values[$i])
             }
         }
 
         # Add the File Hash to the record object
         $record.Add("FileContentSHA256", $FileContentSHA256)
 
-        return $record
+        return [pscustomobject]$record
     }
     # no record to return we are out if bounds
     return $null
@@ -168,18 +173,18 @@ function Send-DataCollectorRequest
         "time-generated-field" = $TimeGenerated
     }
 
-    try {            
+    try {
         # Data Collector - https://docs.microsoft.com/en-us/rest/api/loganalytics/create-request
-        # 
+        #
         # Data limits
         # There are some constraints around the data posted to the Log Analytics Data collection API.
         # POST https://{CustomerID}.ods.opinsights.azure.com/?api-version=2016-04-01
         Invoke-RestMethod -Method POST -Uri "https://$($WorkspaceId).ods.opinsights.azure.com/api/logs?api-version=2016-04-01" -Body $json_body -ContentType "application/json" -Headers $Headers
         Write-Host "Importing '$($records.Length)' records."
-    } 
+    }
     catch {
         Write-Host "Failed to execute data collector create request for '$WatchlistName'."
-        Write-Host "StatusCode:" $_.Exception.Response.StatusCode.value__ 
+        Write-Host "StatusCode:" $_.Exception.Response.StatusCode.value__
         Write-Host "StatusDescription:" $_.Exception.Response.StatusDescription
     }
 }
