@@ -1,6 +1,6 @@
 # Service limits which may change over time
 $MAX_FIELD_LIMIT = 49
-$MAX_JSON_PAYLOAD_SIZE_MB = 30MB
+$MAX_JSON_PAYLOAD_SIZE_MB = 5MB # Maximum supported value is 30MB
 $MAX_JSON_FIELD_VALUE_SIZE_KB = 32KB
 
 function Import-Watchlist
@@ -28,52 +28,61 @@ function Import-Watchlist
         [String] $WorkspaceSharedKey
     )
 
+    #optimzation for running non-interactively
+    $progressPreference = 'silentlyContinue' 
+
     Write-Host "Importing Watchlist '$WatchlistName'."
 
-    # Parse the file contents as CSV
-    $csv = $FileContents | ConvertFrom-Csv -Delim ','
+    $stream = [IO.MemoryStream]::new([Text.Encoding]::UTF8.GetBytes($FileContents))
+    $reader = [IO.StreamReader]::new($stream)
+    $headers = $reader.ReadLine()
 
     # Recommended maximum number of fields for a given type is 50. This is a practical limit from a usability and search experience perspective.
-    $field_count = ($csv | get-member -type NoteProperty).count
+    $field_count = ($headers -split ",").Length #($csv | get-member -type NoteProperty).count
     if($field_count -gt $MAX_FIELD_LIMIT)
     {
         Write-Warning "Recommended maximum number of fields for a given type is $MAX_FIELD_LIMIT."
     }
 
     # Array for buffering records
-    $records = @()
+    $records = [System.Collections.ArrayList]@()
 
     # Ensure all imported records from same file have the same time generated
     $timeGenerated = Get-Date
 
-    # Loop through each row in the csv
-    for ($i = 0 ; $i -lt $csv.length ; $i++) { 
+    while ( $row = $reader.ReadLine() ) {
+
+        $csv = "$headers`n$row" | ConvertFrom-Csv -Delim ','
+
         # Get our current record
-        $current_record = Get-Record -records $csv -index $i -FileContentSHA256 $FileContentSHA256
+        $current_record = Get-Record -records $csv -index 0 -FileContentSHA256 $FileContentSHA256
 
         # Maximum of 30 MB per post to Log Analytics Data Collector API. This is a size limit for a single post. If the data from a single post that exceeds 30 MB, you should split the data up to smaller sized chunks and send them concurrently.
         if(([System.Text.Encoding]::UTF8.GetByteCount(($records + $current_record  | ConvertTo-Json -Depth 99 -Compress)) / 1MB) -ge $MAX_JSON_PAYLOAD_SIZE_MB)
         {
-            Write-Information "Maximum of $($MAX_JSON_PAYLOAD_SIZE_MB) MB per post to Log Analytics Data Collector API automatically batching requests."
+            Write-Host "Maximum of $($MAX_JSON_PAYLOAD_SIZE_MB) MB per post to Log Analytics Data Collector API automatically batching requests."
 
             # Create records from current buffer
             Send-DataCollectorRequest -records $records -WatchlistName $WatchlistName -WorkspaceId $WorkspaceId -WorkspaceSharedKey $WorkspaceSharedKey -TimeGenerated $timeGenerated
 
             # Clear the buffer in preperation for next iteration
-            $records = @()
+            $records.Clear()
         }
 
         # Add current record to the buffer
-        $records +=  $current_record
-    
+        $records += $current_record
     }
 
     # Do we have any records left to create
     if($records.Length -gt 0)
     {
+        Write-Host "Flushing remainder of batched requests $($records.Length)."
         # Create remaining records
         Send-DataCollectorRequest -records $records -WatchlistName $WatchlistName -WorkspaceId $WorkspaceId -WorkspaceSharedKey $WorkspaceSharedKey -TimeGenerated $timeGenerated
     }
+
+    $reader.Dispose()
+    $stream.Dispose()
 
     Write-Host "Completed Watchlist '$WatchlistName' import."
 }
@@ -97,7 +106,7 @@ function Get-Record
     if(($index -ge 0) -and 
         ($index -lt $records.Length))
     {
-        $record = @{}
+        $record = [ordered]@{}
 
         $records[$index].PSObject.Properties | ForEach-Object {
             # Maximum of 32 KB limit for field values. If the field value is greater than 32 KB, the data will be truncated.
