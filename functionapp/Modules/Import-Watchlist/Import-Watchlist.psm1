@@ -1,4 +1,5 @@
 #Requires -Version 7
+using assembly "C:\Program Files\dotnet\shared\Microsoft.NETCore.App\3.1.21\System.Text.Json.dll"
 
 # Service limits which may change over time
 $MAX_FIELD_LIMIT = 49
@@ -53,9 +54,10 @@ function Import-Watchlist
     $headers | ForEach-Object {
         $estHeaderSizeInKB += [System.Text.Encoding]::UTF8.GetByteCount("`"$_`":") / 1KB
     }
+    $estHeaderSizeInKB += [System.Text.Encoding]::UTF8.GetByteCount("`"FileContentSHA256`":") / 1KB
 
     # Array for buffering records
-    $records = [System.Collections.ArrayList]::new()
+    $records = [System.Collections.ArrayList]@()
     $estBatchSizeInMB = 0
 
     # Ensure all imported records from same file have the same time generated
@@ -70,13 +72,13 @@ function Import-Watchlist
 
             if($null -ne $current_record)
             {
-                $estFieldSizeInKB = [System.Text.Encoding]::UTF8.GetByteCount("{}")  / 1KB # include delimiters for json object
+                $estFieldSizeInKB = [System.Text.Encoding]::UTF8.GetByteCount("{},7FBA1EF9F945DC48264B3F2530079674DD69B5ACBF6D4AF27FBAC68248C4BE61")  / 1KB # include delimiters for json object and hash value for FileContentSHA256
                 $fields | ForEach-Object {
-                    $estFieldSizeInKB += [System.Text.Encoding]::UTF8.GetByteCount("`"$_`"") / 1KB
+                    $estFieldSizeInKB += [System.Text.Encoding]::UTF8.GetByteCount("`"$_`",") / 1KB
                 }
 
                 $estFieldSizeInMB = ($estHeaderSizeInKB + $estFieldSizeInKB) / 1KB
-                Write-Debug "RecordsInBatch : $($records.Length), EstimatedBatchSizeMB : $estBatchSizeInMB, EstimatedRecordSizeMB : $($estFieldSizeInMB)"
+                Write-Debug "RecordsInBatch : $($records.Count), EstimatedBatchSizeMB : $estBatchSizeInMB, EstimatedRecordSizeMB : $($estFieldSizeInMB)"
 
                 # Maximum of 30 MB per post to Log Analytics Data Collector API. This is a size limit for a single post. If the data from a single post that exceeds 30 MB, you should split the data up to smaller sized chunks and send them concurrently.
                 if( ($estBatchSizeInMB + $estFieldSizeInMB) -ge $MAX_JSON_PAYLOAD_SIZE_MB)
@@ -84,7 +86,7 @@ function Import-Watchlist
                     Write-Host "Maximum of $($MAX_JSON_PAYLOAD_SIZE_MB) MB per post to Log Analytics Data Collector API automatically batching requests."
 
                     # Create records from current buffer
-                    # Send-DataCollectorRequest -records $records -WatchlistName $WatchlistName -WorkspaceId $WorkspaceId -WorkspaceSharedKey $WorkspaceSharedKey -TimeGenerated $timeGenerated
+                    Send-DataCollectorRequest -records $records -WatchlistName $WatchlistName -WorkspaceId $WorkspaceId -WorkspaceSharedKey $WorkspaceSharedKey -TimeGenerated $timeGenerated
 
                     # Clear the buffer in preperation for next iteration
                     $records.Clear()
@@ -92,17 +94,17 @@ function Import-Watchlist
                 }
 
                 # Add current record to the buffer
-                $records += $current_record
+                $records.Add($current_record) | Out-Null
                 $estBatchSizeInMB += $estFieldSizeInMB
             }
         }
 
         # Do we have any records left to create
-        if($records.Length -gt 0)
+        if($records.Count -gt 0)
         {
-            Write-Host "Flushing remainder of batched requests $($records.Length)."
+            Write-Host "Flushing remainder of batched requests $($records.Count)."
             # Create remaining records
-            # Send-DataCollectorRequest -records $records -WatchlistName $WatchlistName -WorkspaceId $WorkspaceId -WorkspaceSharedKey $WorkspaceSharedKey -TimeGenerated $timeGenerated
+            Send-DataCollectorRequest -records $records -WatchlistName $WatchlistName -WorkspaceId $WorkspaceId -WorkspaceSharedKey $WorkspaceSharedKey -TimeGenerated $timeGenerated
         }
 
         $reader.Dispose()
