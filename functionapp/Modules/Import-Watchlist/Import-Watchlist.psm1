@@ -2,7 +2,7 @@
 
 # Service limits which may change over time
 $MAX_FIELD_LIMIT = 49
-$MAX_JSON_PAYLOAD_SIZE_MB = 30 # Maximum supported value is 30MB
+$MAX_JSON_PAYLOAD_SIZE_MB = 29 # Theoretical Maximum supported value is 30MB
 $MAX_JSON_FIELD_VALUE_SIZE_KB = 32
 
 function Import-Watchlist
@@ -35,44 +35,34 @@ function Import-Watchlist
 
     Write-Host "Importing Watchlist '$WatchlistName'."
 
-    $stream = [IO.MemoryStream]::new([Text.Encoding]::UTF8.GetBytes($FileContents))
-    $reader = [IO.StreamReader]::new($stream)
-    $headers = $reader.ReadLine() -split ","
+    # Parse the file contents as CSV
+    $csv = $FileContents | ConvertFrom-Csv -Delim ','
 
     # Recommended maximum number of fields for a given type is 50. This is a practical limit from a usability and search experience perspective.
-    if($headers.Length -gt $MAX_FIELD_LIMIT)
+    $field_count = ($csv | get-member -type NoteProperty).count
+    if($field_count -gt $MAX_FIELD_LIMIT)
     {
         Write-Warning "Recommended maximum number of fields for a given type is $MAX_FIELD_LIMIT."
     }
 
-    $estHeaderSizeInKB = [System.Text.Encoding]::UTF8.GetByteCount("[]")  / 1KB # include delimiters for json array
-    $headers | ForEach-Object {
-        $estHeaderSizeInKB += [System.Text.Encoding]::UTF8.GetByteCount("`"$_`":") / 1KB
-    }
-    $estHeaderSizeInKB += [System.Text.Encoding]::UTF8.GetByteCount("`"FileContentSHA256`":") / 1KB
-
     # Array for buffering records
     $records = [System.Collections.ArrayList]@()
-    $estBatchSizeInMB = 0
+    $padding = "".PadLeft($csv.length - 1, ",")
+    $startingBatchSize = [System.Text.Encoding]::UTF8.GetByteCount("[$($padding)]") / 1MB
+    $estBatchSizeInMB = $startingBatchSize
 
     # Ensure all imported records from same file have the same time generated
     $timeGenerated = Get-Date
 
     $measured = Measure-Command {
-        while ( $line = $reader.ReadLine() ) {
-            $fields = ($line -split ",")
+        for ($i = 0 ; $i -lt $csv.length ; $i++) {
 
             # Get our current record
-            $current_record = Get-Record -headers $headers -values $fields -FileContentSHA256 $FileContentSHA256
+            $current_record = $csv[$i] | Get-Record -FileContentSHA256 $FileContentSHA256
 
             if($null -ne $current_record)
             {
-                $estFieldSizeInKB = [System.Text.Encoding]::UTF8.GetByteCount("{},`"7FBA1EF9F945DC48264B3F2530079674DD69B5ACBF6D4AF27FBAC68248C4BE61`"")  / 1KB # include delimiters for json object and hash value for FileContentSHA256
-                $fields | ForEach-Object {
-                    $estFieldSizeInKB += [System.Text.Encoding]::UTF8.GetByteCount("`"$_`",") / 1KB
-                }
-
-                $estFieldSizeInMB = ($estHeaderSizeInKB + $estFieldSizeInKB) / 1KB
+                $estFieldSizeInMB =  [System.Text.Encoding]::UTF8.GetByteCount("$current_record," )/ 1MB
                 Write-Debug "RecordsInBatch : $($records.Count), EstimatedBatchSizeMB : $estBatchSizeInMB, EstimatedRecordSizeMB : $($estFieldSizeInMB)"
 
                 # Maximum of 30 MB per post to Log Analytics Data Collector API. This is a size limit for a single post. If the data from a single post that exceeds 30 MB, you should split the data up to smaller sized chunks and send them concurrently.
@@ -85,7 +75,7 @@ function Import-Watchlist
 
                     # Clear the buffer in preperation for next iteration
                     $records.Clear()
-                    $estBatchSizeInMB = 0
+                    $estBatchSizeInMB = $startingBatchSize
                 }
 
                 # Add current record to the buffer
@@ -113,45 +103,34 @@ function Get-Record
 {
     [CmdletBinding()]
     param(
-        [Parameter(Mandatory)]
+        [Parameter(Mandatory, ValueFromPipeline = $true)]
         [ValidateNotNullOrEmpty()]
-        [Array] $headers,
-
-        [Parameter(Mandatory)]
-        [ValidateNotNullOrEmpty()]
-        [Array] $values,
+        [PSCustomObject] $row,
 
         [Parameter(Mandatory)]
         [ValidateNotNullOrEmpty()]
         [String] $FileContentSHA256
     )
-    if(($headers.Length -gt 0) -and
-        ($headers.Length -eq $values.Length))
-    {
-        $record = @{}
+    $record = [ordered]@{}
 
-        for ($i = 0; $i -lt $headers.Length; $i++) {
-            # Maximum of 32 KB limit for field values. If the field value is greater than 32 KB, the data will be truncated.
-            $sizeInKB = ([System.Text.Encoding]::UTF8.GetByteCount($values[$i]) / 1KB)
-
-            if($sizeInKB -gt $MAX_JSON_FIELD_VALUE_SIZE_KB)
-            {
-                Write-Warning "Field '$($headers[$i])' has a value which is larger than the Maximum of $($MAX_JSON_FIELD_VALUE_SIZE_KB) KB, the data will be truncated."
-                $record.Add($headers[$i],[System.String]::new([System.Text.Encoding]::UTF8.GetBytes($values[$i]), 0, $MAX_JSON_FIELD_VALUE_SIZE_KB))
-            }
-            else
-            {
-                $record.Add($headers[$i],$values[$i])
-            }
+    $row.PSObject.Properties | ForEach-Object {
+        # Maximum of 32 KB limit for field values. If the field value is greater than 32 KB, the data will be truncated.
+        $sizeInKB = ([System.Text.Encoding]::UTF8.GetByteCount($_.Value) / 1KB)
+        if($sizeInKB -gt $MAX_JSON_FIELD_VALUE_SIZE_KB)
+        {
+            Write-Warning "Field '$($_.Name)' has a value which is larger than the Maximum of $($MAX_JSON_FIELD_VALUE_SIZE_KB) KB, the data will be truncated."
+            $record.Add($_.Name,[System.String]::new([System.Text.Encoding]::UTF8.GetBytes($_.Value), 0, $MAX_JSON_FIELD_VALUE_SIZE_KB))
         }
-
-        # Add the File Hash to the record object
-        $record.Add("FileContentSHA256", $FileContentSHA256)
-
-        return $record
+        else
+        {
+            $record.Add($_.Name,$_.Value)
+        }
     }
-    # no record to return we are out if bounds
-    return $null
+
+    # Add the File Hash to the record object
+    $record.Add("FileContentSHA256", $FileContentSHA256)
+
+    return ([PSCustomObject]$record | ConvertTo-Json -Compress)
 }
 
 function Send-DataCollectorRequest
@@ -178,7 +157,7 @@ function Send-DataCollectorRequest
         [ValidateNotNullOrEmpty()]
         [String] $TimeGenerated
     )
-    $json_body = $records | ConvertTo-Json -Depth 99 -Compress
+    $json_body = "[$(($records -join ",").Trim(","))]"
 
     $bodySizeInMB = ([System.Text.Encoding]::UTF8.GetByteCount($json_body) / 1MB)
 
@@ -206,7 +185,8 @@ function Send-DataCollectorRequest
         # Data limits
         # There are some constraints around the data posted to the Log Analytics Data collection API.
         # POST https://{CustomerID}.ods.opinsights.azure.com/?api-version=2016-04-01
-        Invoke-RestMethod -Method POST -Uri "https://$($WorkspaceId).ods.opinsights.azure.com/api/logs?api-version=2016-04-01" -Body $json_body -ContentType "application/json" -Headers $Headers
+        $response = Invoke-WebRequest -UseBasicParsing -Method POST -Uri "https://$($WorkspaceId).ods.opinsights.azure.com/api/logs?api-version=2016-04-01" -Body $json_body -ContentType "application/json" -Headers $Headers
+        Write-Debug "POST https://$($WorkspaceId).ods.opinsights.azure.com/api/logs?api-version=2016-04-01 StatusCode $($response.StatusCode)"
         Write-Host "Importing '$($records.Length)' records."
     }
     catch {
