@@ -2,7 +2,7 @@
 
 # Service limits which may change over time
 $MAX_FIELD_LIMIT = 49
-$MAX_JSON_PAYLOAD_SIZE_MB = 29 # Theoretical Maximum supported value is 30MB
+$MAX_JSON_PAYLOAD_SIZE_MB = 25 # Theoretical Maximum supported value is 30MB
 $MAX_JSON_FIELD_VALUE_SIZE_KB = 32
 
 function Import-Watchlist
@@ -36,11 +36,14 @@ function Import-Watchlist
     Write-Host "Importing Watchlist '$WatchlistName'."
 
     # Parse the file contents as CSV
-    $csv = $FileContents | ConvertFrom-Csv -Delim ','
+    # $csv = $FileContents | ConvertFrom-Csv -Delim ','
+
+    $stream = [IO.MemoryStream]::new([Text.Encoding]::UTF8.GetBytes($FileContents))
+    $reader = [IO.StreamReader]::new($stream)
+    $header = $reader.ReadLine()
 
     # Recommended maximum number of fields for a given type is 50. This is a practical limit from a usability and search experience perspective.
-    $field_count = ($csv | get-member -type NoteProperty).count
-    if($field_count -gt $MAX_FIELD_LIMIT)
+    if($header.Length -gt $MAX_FIELD_LIMIT)
     {
         Write-Warning "Recommended maximum number of fields for a given type is $MAX_FIELD_LIMIT."
     }
@@ -55,10 +58,10 @@ function Import-Watchlist
     $timeGenerated = Get-Date
 
     $measured = Measure-Command {
-        for ($i = 0 ; $i -lt $csv.length ; $i++) {
+        while ( $line = $reader.ReadLine() ) {
 
             # Get our current record
-            $current_record = $csv[$i] | Get-Record -FileContentSHA256 $FileContentSHA256
+            $current_record = "$header`n$line" | ConvertFrom-Csv -Delim ',' | Get-Record -FileContentSHA256 $FileContentSHA256
 
             if($null -ne $current_record)
             {
@@ -91,6 +94,9 @@ function Import-Watchlist
             # Create remaining records
             Send-DataCollectorRequest -records $records -WatchlistName $WatchlistName -WorkspaceId $WorkspaceId -WorkspaceSharedKey $WorkspaceSharedKey -TimeGenerated $timeGenerated
         }
+
+        $reader.Dispose()
+        $stream.Dispose()
     }
 
     Write-Host "Completed Watchlist '$WatchlistName' import in $($measured.TotalSeconds)s."
