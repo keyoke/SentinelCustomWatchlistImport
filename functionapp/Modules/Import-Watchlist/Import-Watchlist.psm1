@@ -1,5 +1,4 @@
 #Requires -Version 7
-using assembly "C:\Program Files\dotnet\shared\Microsoft.NETCore.App\3.1.21\System.Text.Json.dll"
 
 # Service limits which may change over time
 $MAX_FIELD_LIMIT = 49
@@ -35,10 +34,6 @@ function Import-Watchlist
     $progressPreference = 'silentlyContinue'
 
     Write-Host "Importing Watchlist '$WatchlistName'."
-
-    $options = [System.Text.Json.JsonSerializerOptions]::new()
-    #$options.MaxDepth = 1
-    $options.ReferenceHandler = [System.Text.Json.Serialization.ReferenceHandler]::IgnoreCycles
 
     $stream = [IO.MemoryStream]::new([Text.Encoding]::UTF8.GetBytes($FileContents))
     $reader = [IO.StreamReader]::new($stream)
