@@ -91,9 +91,6 @@ function Import-Watchlist
             # Create remaining records
             Send-DataCollectorRequest -records $records -WatchlistName $WatchlistName -WorkspaceId $WorkspaceId -WorkspaceSharedKey $WorkspaceSharedKey -TimeGenerated $timeGenerated
         }
-
-        $reader.Dispose()
-        $stream.Dispose()
     }
 
     Write-Host "Completed Watchlist '$WatchlistName' import in $($measured.TotalSeconds)s."
