@@ -41,16 +41,18 @@ function Import-Watchlist
     $stream = [IO.MemoryStream]::new([Text.Encoding]::UTF8.GetBytes($FileContents))
     $reader = [IO.StreamReader]::new($stream)
     $header = $reader.ReadLine()
+    $regex = [regex]::new("[\t,](?=(?:[^\`"]|\`"[^\`"]*\`")*$)")
+    $headers = $regex.Split($header)
 
     # Recommended maximum number of fields for a given type is 50. This is a practical limit from a usability and search experience perspective.
-    if($header.Length -gt $MAX_FIELD_LIMIT)
+    if($headers.Length -gt $MAX_FIELD_LIMIT)
     {
         Write-Warning "Recommended maximum number of fields for a given type is $MAX_FIELD_LIMIT."
     }
 
     # Array for buffering records
     $records = [System.Collections.ArrayList]@()
-    $padding = "".PadLeft($csv.length - 1, ",")
+    $padding = "".PadLeft($headers.Length - 1, ",")
     $startingBatchSize = [System.Text.Encoding]::UTF8.GetByteCount("[$($padding)]") / 1MB
     $estBatchSizeInMB = $startingBatchSize
 
