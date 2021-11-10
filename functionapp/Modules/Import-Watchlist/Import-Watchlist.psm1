@@ -67,7 +67,7 @@ function Import-Watchlist
 
             if($null -ne $current_record)
             {
-                $estFieldSizeInKB = [System.Text.Encoding]::UTF8.GetByteCount("{},7FBA1EF9F945DC48264B3F2530079674DD69B5ACBF6D4AF27FBAC68248C4BE61")  / 1KB # include delimiters for json object and hash value for FileContentSHA256
+                $estFieldSizeInKB = [System.Text.Encoding]::UTF8.GetByteCount("{},`"7FBA1EF9F945DC48264B3F2530079674DD69B5ACBF6D4AF27FBAC68248C4BE61`"")  / 1KB # include delimiters for json object and hash value for FileContentSHA256
                 $fields | ForEach-Object {
                     $estFieldSizeInKB += [System.Text.Encoding]::UTF8.GetByteCount("`"$_`",") / 1KB
                 }
