@@ -119,16 +119,23 @@ function Get-Record
     $record = [ordered]@{}
 
     $row.PSObject.Properties | ForEach-Object {
-        # Maximum of 32 KB limit for field values. If the field value is greater than 32 KB, the data will be truncated.
-        $sizeInKB = ([System.Text.Encoding]::UTF8.GetByteCount($_.Value) / 1KB)
-        if($sizeInKB -gt $MAX_JSON_FIELD_VALUE_SIZE_KB)
+        if(![string]::IsNullOrEmpty($_.Value))
         {
-            Write-Warning "Field '$($_.Name)' has a value which is larger than the Maximum of $($MAX_JSON_FIELD_VALUE_SIZE_KB) KB, the data will be truncated."
-            $record.Add($_.Name,[System.String]::new([System.Text.Encoding]::UTF8.GetBytes($_.Value), 0, $MAX_JSON_FIELD_VALUE_SIZE_KB))
+            # Maximum of 32 KB limit for field values. If the field value is greater than 32 KB, the data will be truncated.
+            $sizeInKB = ([System.Text.Encoding]::UTF8.GetByteCount($_.Value) / 1KB)
+            if($sizeInKB -gt $MAX_JSON_FIELD_VALUE_SIZE_KB)
+            {
+                Write-Warning "Field '$($_.Name)' has a value which is larger than the Maximum of $($MAX_JSON_FIELD_VALUE_SIZE_KB) KB, the data will be truncated."
+                $record.Add($_.Name,[System.String]::new([System.Text.Encoding]::UTF8.GetBytes($_.Value), 0, $MAX_JSON_FIELD_VALUE_SIZE_KB * 1KB))
+            }
+            else
+            {
+                $record.Add($_.Name,$_.Value)
+            }
         }
-        else
-        {
-            $record.Add($_.Name,$_.Value)
+        else {
+            Write-Information "Field '$($_.Name)' does not have a value."
+            $record.Add($_.Name,"")
         }
     }
 
