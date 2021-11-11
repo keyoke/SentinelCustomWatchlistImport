@@ -1,8 +1,9 @@
 #Requires -Version 7
 
 # Service limits which may change over time
-$MAX_FIELD_LIMIT = 49
+$MAX_FIELD_LIMIT = 500 # Tables in Log Analytics workspaces support only up to 500 columns, but a maximum of 50 fields is reccomended as a practical limit from a usability and search experience perspective.
 $MAX_JSON_PAYLOAD_SIZE_MB = 25 # Theoretical Maximum supported value is 30MB
+$MAX_JSON_FIELD_NAME_LIMIT_CHARS = 50
 $MAX_JSON_FIELD_VALUE_SIZE_KB = 32
 
 function Import-Watchlist
@@ -125,17 +126,23 @@ function Get-Record
     $row.PSObject.Properties | ForEach-Object {
         if(![string]::IsNullOrEmpty($_.Value))
         {
+            $name = $_.Name
+            $value = $_.Value
+
             # Maximum of 32 KB limit for field values. If the field value is greater than 32 KB, the data will be truncated.
-            $sizeInKB = ([System.Text.Encoding]::UTF8.GetByteCount($_.Value) / 1KB)
-            if($sizeInKB -gt $MAX_JSON_FIELD_VALUE_SIZE_KB)
+            if(([System.Text.Encoding]::UTF8.GetByteCount($value) / 1KB) -gt $MAX_JSON_FIELD_VALUE_SIZE_KB)
             {
-                Write-Warning "Field '$($_.Name)' has a value which is larger than the Maximum of $($MAX_JSON_FIELD_VALUE_SIZE_KB) KB, the data will be truncated."
-                $record.Add($_.Name,[System.String]::new([System.Text.Encoding]::UTF8.GetBytes($_.Value), 0, $MAX_JSON_FIELD_VALUE_SIZE_KB * 1KB))
+               Write-Warning "Field '$($name)' has a value which is larger than the Maximum of $($MAX_JSON_FIELD_VALUE_SIZE_KB) KB, the data will be truncated."
+               $value = [System.String]::new([System.Text.Encoding]::UTF8.GetBytes($value), 0, $MAX_JSON_FIELD_VALUE_SIZE_KB * 1KB)
             }
-            else
+
+            if($name.Length -gt $MAX_JSON_FIELD_NAME_LIMIT_CHARS)
             {
-                $record.Add($_.Name,$_.Value)
+               Write-Warning "Field '$($name)' has a name which is larger than the Maximum of $($MAX_JSON_FIELD_NAME_LIMIT_CHARS) characters, the data will be truncated."
+               $name = $name.SubString(0, $MAX_JSON_FIELD_NAME_LIMIT_CHARS)
             }
+
+            $record.Add($name,$value)
         }
         else {
             Write-Information "Field '$($_.Name)' does not have a value."
