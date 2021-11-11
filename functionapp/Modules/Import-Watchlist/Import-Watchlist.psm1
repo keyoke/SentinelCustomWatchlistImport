@@ -57,13 +57,13 @@ function Import-Watchlist
     $estBatchSizeInMB = $startingBatchSize
 
     # Ensure all imported records from same file have the same time generated
-    $timeGenerated = Get-Date
+    $timeGenerated = Get-Date -AsUTC
 
     $measured = Measure-Command {
         while ( $line = $reader.ReadLine() ) {
 
             # Get our current record
-            $current_record = "$header`n$line" | ConvertFrom-Csv -Delim ',' | Get-Record -FileContentSHA256 $FileContentSHA256
+            $current_record = "$header`n$line" | ConvertFrom-Csv -Delim ',' | Get-Record -FileContentSHA256 $FileContentSHA256 -TimeGenerated $timeGenerated
 
             if($null -ne $current_record)
             {
@@ -76,7 +76,7 @@ function Import-Watchlist
                     Write-Host "Maximum of $($MAX_JSON_PAYLOAD_SIZE_MB) MB per post to Log Analytics Data Collector API automatically batching requests."
 
                     # Create records from current buffer
-                    Send-DataCollectorRequest -records $records -WatchlistName $WatchlistName -WorkspaceId $WorkspaceId -WorkspaceSharedKey $WorkspaceSharedKey -TimeGenerated $timeGenerated
+                    Send-DataCollectorRequest -records $records -WatchlistName $WatchlistName -WorkspaceId $WorkspaceId -WorkspaceSharedKey $WorkspaceSharedKey
 
                     # Clear the buffer in preperation for next iteration
                     $records.Clear()
@@ -94,7 +94,7 @@ function Import-Watchlist
         {
             Write-Host "Flushing remainder of batched requests $($records.Count)."
             # Create remaining records
-            Send-DataCollectorRequest -records $records -WatchlistName $WatchlistName -WorkspaceId $WorkspaceId -WorkspaceSharedKey $WorkspaceSharedKey -TimeGenerated $timeGenerated
+            Send-DataCollectorRequest -records $records -WatchlistName $WatchlistName -WorkspaceId $WorkspaceId -WorkspaceSharedKey $WorkspaceSharedKey
         }
 
         $reader.Dispose()
@@ -114,7 +114,11 @@ function Get-Record
 
         [Parameter(Mandatory)]
         [ValidateNotNullOrEmpty()]
-        [String] $FileContentSHA256
+        [String] $FileContentSHA256,
+
+        [Parameter(Mandatory)]
+        [ValidateNotNullOrEmpty()]
+        [DateTime] $TimeGenerated
     )
     $record = [ordered]@{}
 
@@ -141,6 +145,7 @@ function Get-Record
 
     # Add the File Hash to the record object
     $record.Add("FileContentSHA256", $FileContentSHA256)
+    $record.Add("TimeGenerated", $TimeGenerated.ToString("o"))
 
     return ([PSCustomObject]$record | ConvertTo-Json -Compress)
 }
@@ -163,11 +168,7 @@ function Send-DataCollectorRequest
 
         [Parameter(Mandatory)]
         [ValidateNotNullOrEmpty()]
-        [String] $WorkspaceSharedKey,
-
-        [Parameter(Mandatory)]
-        [ValidateNotNullOrEmpty()]
-        [String] $TimeGenerated
+        [String] $WorkspaceSharedKey
     )
     $json_body = "[$(($records -join ",").Trim(","))]"
 
@@ -180,7 +181,7 @@ function Send-DataCollectorRequest
         Write-Error "Maximum of $($MAX_JSON_PAYLOAD_SIZE_MB) MB per request for Log Analytics Data Collector API."
     }
 
-    $Xmsdate = [DateTime]::UtcNow
+    $Xmsdate = Get-Date -AsUTC
 
     $signature = Get-DataCollectorSignature -WorkspaceSharedKey $WorkspaceSharedKey -Xmsdate $Xmsdate -ContentLength $json_body.length
 
@@ -188,7 +189,7 @@ function Send-DataCollectorRequest
         "Authorization"        = "SharedKey {0}:{1}" -f  $WorkspaceId, $signature;
         "Log-Type"             = $WatchlistName;
         "x-ms-date"            = $($Xmsdate.ToString("r"));
-        "time-generated-field" = $TimeGenerated
+        "time-generated-field" = "TimeGenerated"
     }
 
     try {
